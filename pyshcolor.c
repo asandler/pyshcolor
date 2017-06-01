@@ -36,7 +36,16 @@ void move_coordinates(int* y, int* x, int dir) {
 }
 
 void print_lives(int lives) {
-    mvprintw(0, 0, "lives: %d   ", lives);
+    mvprintw(0, 0, "lives: ");//%d   ", lives);
+    attron(COLOR_PAIR(1));
+    for (int i = 0; i < 3; ++i) {
+        if (i < lives) {
+            addch(ACS_CKBOARD | A_ALTCHARSET);
+        } else {
+            addch(' ');
+        }
+    }
+    attroff(COLOR_PAIR(1));
 }
 
 void print_score(int score) {
