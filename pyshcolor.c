@@ -1,9 +1,15 @@
-#include <unistd.h>
-#include <stdlib.h>
+#include <fcntl.h>
 #include <ncurses.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 int max_y, max_x;
+char player_name[25];
 
 void put_symbol(int y, int x, char c) {
     mvaddch(y, x, c);
@@ -86,14 +92,118 @@ void init_game(char* field, int* lives, int* score, int* cur_y, int* cur_x) {
     }
 }
 
+void create_score_table() {
+    struct stat stat_info;
+    if (stat("score.bin", &stat_info) == -1) {
+        int fd = open("score.bin", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+        char buf[25];
+        bzero(buf, 24);
+        strncpy(buf, "player", 24);
+
+        for (int i = 0; i < 20; ++i) {
+            write(fd, buf, 24);
+        }
+        close(fd);
+    }
+}
+
+void print_and_save_score_table(int score) {
+    char names[20][20];
+    int scores[20];
+    unsigned char buf[25];
+    int place = -1;
+
+    bzero(scores, 20);
+    create_score_table();
+
+    int fd = open("score.bin", O_RDONLY);
+    for (int i = 0; i < 20; ++i) {
+        if (read(fd, buf, 24) == 24) {
+            strncpy(names[i], buf, 16);
+            for (int j = 0; j < 8; ++j) {
+                scores[i] *= 256;
+                scores[i] += (int) buf[16 + j];
+            }
+        } else {
+            close(fd);
+            return;
+        }
+    }
+    close(fd);
+
+    for (int i = 0; i < 20; ++i) {
+        if (score > scores[i]) {
+            for (int j = 19; j >= i + 1; --j) {
+                scores[j] = scores[j - 1];
+                strcpy(names[j], names[j - 1]);
+            }
+            scores[i] = score;
+            strncpy(names[i], player_name, 16);
+            place = i;
+            break;
+        }
+    }
+
+    for (int i = 0; i < 20; ++i) {
+        if (i == place) {
+            attron(COLOR_PAIR(3));
+            mvprintw(3 + i, 0, "* %-16s...  %-8d", names[i], scores[i]);
+        } else {
+            if (i == 0) {
+                attron(COLOR_PAIR(1));
+            } else if (i == 1 || i == 2) {
+                attron(COLOR_PAIR(2));
+            } else {
+                attron(COLOR_PAIR(4));
+            }
+            mvprintw(3 + i, 0, "  %-16s...  %-8d", names[i], scores[i]);
+        }
+    }
+    attron(COLOR_PAIR(4));
+
+    fd = open("score.bin", O_WRONLY);
+    for (int i = 0; i < 20; ++i) {
+        write(fd, names[i], 16);
+
+        int scr = scores[i];
+        for (int j = 7; j >= 0; --j) {
+            buf[j] = (unsigned char) (scr % 256);
+            scr /= 256;
+        }
+        write(fd, buf, 8);
+    }
+    close(fd);
+}
+
 int main(int argc, char** argv) {
     initscr();
-    noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
-    nodelay(stdscr, true);
     getmaxyx(stdscr, max_y, max_x);
     srand(time(NULL));
+
+    start_color();
+    use_default_colors();
+    attron(A_BOLD);
+    init_pair(1, COLOR_RED, -1);
+    init_pair(2, COLOR_YELLOW, -1);
+    init_pair(3, COLOR_GREEN, -1);
+    init_pair(4, COLOR_WHITE, -1);
+
+    mvprintw(max_y / 2, max_x / 2, "Your name: ");
+    bzero(player_name, strlen(player_name));
+    getnstr(player_name, 16);
+    for (int i = 0; i < 25; ++i) {
+        if (player_name[i] < ' ' || player_name[i] > 'z') {
+            player_name[i] = ' ';
+        }
+        if (i > 14) {
+            player_name[i] = 0;
+        }
+    }
+
+    nodelay(stdscr, true);
+    noecho();
 
     char* field = (char*) malloc((max_y + 1) * max_x * sizeof(char));
     int lives, score, cur_y, cur_x;
@@ -156,6 +266,8 @@ int main(int argc, char** argv) {
 
         score += calc_bonus(dir_length, ch, old_ch);
         print_score(score);
+
+        print_and_save_score_table(score);
 
         mvprintw(max_y / 2, max_x / 2 - 8, "Play again? (y/n)");
         while (true) {
