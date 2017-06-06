@@ -239,14 +239,10 @@ int main(int argc, char** argv) {
         init_game(&lives, &score, &cur_y, &cur_x);
 
         int ch = 0, old_ch = 0, dir_length = 0;
+        bool started = false;
 
         while (lives > 0) {
             ch = getch();
-
-            if (ch != ERR && ch != old_ch && ch != 0 && old_ch != 0) {
-                score += calc_bonus(dir_length, ch, old_ch);
-                dir_length = 0;
-            }
 
             switch (ch) {
                 case 'q':
@@ -266,7 +262,16 @@ int main(int argc, char** argv) {
                 case KEY_DOWN:
                 case KEY_LEFT:
                 case KEY_RIGHT:
+                    if (ch != old_ch) {
+                        score += calc_bonus(dir_length, ch, old_ch);
+                        dir_length = 0;
+                    }
+
                     old_ch = ch;
+                    started = true;
+
+                    //if (ch != ERR && ch != old_ch && ch != 0 && old_ch != 0) {
+
                     break;
 
                 default:
@@ -284,7 +289,7 @@ int main(int argc, char** argv) {
                 print_lives(--lives);
             }
 
-            if (ch != 0) {
+            if (ch != 0 && started) {
                 print_score(++score);
                 add_enemies(cur_y, cur_x);
             }
