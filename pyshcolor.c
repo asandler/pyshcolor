@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <ncurses.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -10,6 +11,21 @@
 
 int max_y, max_x;
 char player_name[25];
+char* field;
+
+void quit() {
+    if (field) {
+        free(field);
+    }
+    endwin();
+    exit(0);
+}
+
+void sighandler(int signo) {
+    if (signo == SIGWINCH) {
+        quit();
+    }
+}
 
 void put_symbol(int y, int x, char c) {
     mvaddch(y, x, c);
@@ -63,7 +79,7 @@ int calc_bonus(int l, int new, int old) {
     }
 }
 
-void add_enemies(char* field, int cur_y, int cur_x) {
+void add_enemies(int cur_y, int cur_x) {
     int count = 2;
     while (count > 0) {
         int x = rand() % max_x;
@@ -76,7 +92,7 @@ void add_enemies(char* field, int cur_y, int cur_x) {
     }
 }
 
-void init_game(char* field, int* lives, int* score, int* cur_y, int* cur_x) {
+void init_game(int* lives, int* score, int* cur_y, int* cur_x) {
     for (size_t y = 2; y <= max_y; ++y) {
         for (size_t x = 0; x <= max_x; ++x) {
             field[y * max_x + x] = ' ';
@@ -191,6 +207,8 @@ int main(int argc, char** argv) {
     getmaxyx(stdscr, max_y, max_x);
     srand(time(NULL));
 
+    signal(SIGWINCH, sighandler);
+
     start_color();
     use_default_colors();
     attron(A_BOLD);
@@ -199,7 +217,7 @@ int main(int argc, char** argv) {
     init_pair(3, COLOR_GREEN, -1);
     init_pair(4, COLOR_WHITE, -1);
 
-    mvprintw(max_y / 2, max_x / 2, "Your name: ");
+    mvprintw(max_y / 2, max_x / 2 - 6, "Your name: ");
     bzero(player_name, strlen(player_name));
     getnstr(player_name, 16);
     for (int i = 0; i < 25; ++i) {
@@ -214,11 +232,11 @@ int main(int argc, char** argv) {
     nodelay(stdscr, true);
     noecho();
 
-    char* field = (char*) malloc((max_y + 1) * max_x * sizeof(char));
+    field = (char*) malloc((max_y + 1) * max_x * sizeof(char));
     int lives, score, cur_y, cur_x;
 
     while (true) {
-        init_game(field, &lives, &score, &cur_y, &cur_x);
+        init_game(&lives, &score, &cur_y, &cur_x);
 
         int ch = 0, old_ch = 0, dir_length = 0;
 
@@ -232,12 +250,13 @@ int main(int argc, char** argv) {
 
             switch (ch) {
                 case 'q':
-                    mvprintw(max_y / 2, max_x / 2 - 8, "Really quit? (y/n)");
+                    mvprintw(max_y / 2, max_x / 2 - 10, "  Really quit? (y/n)   ");
                     while (true) {
                         ch = getch();
                         if (ch == 'y') {
-                            goto quit;
+                            quit();
                         } else if (ch == 'n') {
+                            lives = 0;
                             break;
                         }
                     }
@@ -267,7 +286,7 @@ int main(int argc, char** argv) {
 
             if (ch != 0) {
                 print_score(++score);
-                add_enemies(field, cur_y, cur_x);
+                add_enemies(cur_y, cur_x);
             }
 
             usleep(20000);
@@ -278,19 +297,14 @@ int main(int argc, char** argv) {
 
         print_and_save_score_table(score);
 
-        mvprintw(max_y / 2, max_x / 2 - 8, "Play again? (y/n)");
+        mvprintw(max_y / 2, max_x / 2 - 10, "  Play again? (y/n)   ");
         while (true) {
             ch = getch();
             if (ch == 'n') {
-                goto quit;
+                quit();
             } else if (ch == 'y') {
                 break;
             }
         }
     }
-
-quit:
-    free(field);
-    endwin();
-    return 0;
 }
