@@ -219,7 +219,12 @@ int main(int argc, char** argv) {
 
     mvprintw(max_y / 2, max_x / 2 - 6, "Your name: ");
     bzero(player_name, strlen(player_name));
-    getnstr(player_name, 16);
+
+    while (!strlen(player_name)) {
+        move(max_y / 2, max_x / 2 + 5);
+        getnstr(player_name, 16);
+    }
+
     for (int i = 0; i < 25; ++i) {
         if (player_name[i] < ' ' || player_name[i] > 'z') {
             player_name[i] = ' ';

@@ -1,2 +1,2 @@
 all:
-	gcc pyshcolor.c -o pyshcolor -std=c99 -lncurses
+	gcc pyshcolor.c -o pyshcolor -D _BSD_SOURCE -std=c99 -lncurses
