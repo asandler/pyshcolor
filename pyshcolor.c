@@ -12,18 +12,11 @@
 int max_y, max_x;
 char player_name[25];
 char* field;
-
-void quit() {
-    if (field) {
-        free(field);
-    }
-    endwin();
-    exit(0);
-}
+bool running;
 
 void sighandler(int signo) {
     if (signo == SIGWINCH) {
-        quit();
+        running = false;
     }
 }
 
@@ -79,14 +72,30 @@ int calc_bonus(int l, int new, int old) {
     }
 }
 
+void set_field(int y, int x, char c) {
+    if (y * max_x + x <= (max_y + 1) * max_x) {
+        field[y * max_x + x] = c;
+    } else {
+        running = false;
+    }
+}
+
+char get_field(int y, int x) {
+    if (y * max_x + x <= (max_y + 1) * max_x) {
+        return field[y * max_x + x];
+    } else {
+        return (char)(0);
+    }
+}
+
 void add_enemies(int cur_y, int cur_x) {
     int count = 2;
-    while (count > 0) {
+    while (running && count > 0) {
         int x = rand() % max_x;
         int y = 2 + rand() % (max_y - 2);
         if (x != cur_x || y != cur_y) {
             count--;
-            field[y * max_x + x] = '*';
+            set_field(y, x, '*');
             put_symbol(y, x, '*');
         }
     }
@@ -95,8 +104,8 @@ void add_enemies(int cur_y, int cur_x) {
 void init_game(int* lives, int* score, int* cur_y, int* cur_x) {
     for (size_t y = 2; y <= max_y; ++y) {
         for (size_t x = 0; x <= max_x; ++x) {
-            field[y * max_x + x] = ' ';
-            put_symbol(y, x, field[y * max_x + x]);
+            set_field(y, x, ' ');
+            put_symbol(y, x, ' ');
         }
     }
 
@@ -109,7 +118,7 @@ void init_game(int* lives, int* score, int* cur_y, int* cur_x) {
     *cur_x = max_x / 2;
     *cur_y = max_y / 2;
 
-    field[*cur_y * max_y + *cur_x] = ' ';
+    set_field(*cur_y, *cur_x, ' ');
     put_symbol(*cur_y, *cur_x, '@');
 
     for (size_t x = 0; x < max_x; ++x) {
@@ -207,7 +216,15 @@ int main(int argc, char** argv) {
     getmaxyx(stdscr, max_y, max_x);
     srand(time(NULL));
 
-    signal(SIGWINCH, sighandler);
+    struct sigaction sigact;
+    sigact.sa_handler = sighandler;
+    sigfillset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+
+    if (sigaction(SIGWINCH, &sigact, NULL) == -1) {
+        endwin();
+        return 1;
+    }
 
     start_color();
     use_default_colors();
@@ -220,7 +237,7 @@ int main(int argc, char** argv) {
     mvprintw(max_y / 2, max_x / 2 - 6, "Your name: ");
     bzero(player_name, strlen(player_name));
 
-    while (!strlen(player_name)) {
+    while (running && !strlen(player_name)) {
         move(max_y / 2, max_x / 2 + 5);
         getnstr(player_name, 16);
     }
@@ -239,23 +256,25 @@ int main(int argc, char** argv) {
 
     field = (char*) malloc((max_y + 1) * max_x * sizeof(char));
     int lives, score, cur_y, cur_x;
+    running = true;
 
-    while (true) {
+    while (running) {
         init_game(&lives, &score, &cur_y, &cur_x);
 
         int ch = 0, old_ch = 0, dir_length = 0;
-        bool started = false;
+        bool game_started = false;
 
-        while (lives > 0) {
+        while (running && lives > 0) {
             ch = getch();
 
             switch (ch) {
                 case 'q':
                     mvprintw(max_y / 2, max_x / 2 - 10, "  Really quit? (y/n)   ");
-                    while (true) {
+                    while (running) {
                         ch = getch();
                         if (ch == 'y') {
-                            quit();
+                            running = false;
+                            break;
                         } else if (ch == 'n') {
                             lives = 0;
                             break;
@@ -273,10 +292,7 @@ int main(int argc, char** argv) {
                     }
 
                     old_ch = ch;
-                    started = true;
-
-                    //if (ch != ERR && ch != old_ch && ch != 0 && old_ch != 0) {
-
+                    game_started = true;
                     break;
 
                 default:
@@ -289,12 +305,12 @@ int main(int argc, char** argv) {
             put_symbol(cur_y, cur_x, '@');
             ++dir_length;
 
-            if (field[cur_y * max_x + cur_x] == '*') {
-                field[cur_y * max_x + cur_x] = ' ';
+            if (get_field(cur_y, cur_x) == '*') {
+                set_field(cur_y, cur_x, ' ');
                 print_lives(--lives);
             }
 
-            if (ch != 0 && started) {
+            if (ch != 0 && game_started) {
                 print_score(++score);
                 add_enemies(cur_y, cur_x);
             }
@@ -308,13 +324,22 @@ int main(int argc, char** argv) {
         print_and_save_score_table(score);
 
         mvprintw(max_y / 2, max_x / 2 - 10, "  Play again? (y/n)   ");
-        while (true) {
+
+        while (running) {
             ch = getch();
             if (ch == 'n') {
-                quit();
+                running = false;
+                break;
             } else if (ch == 'y') {
                 break;
             }
         }
     }
+
+    if (field) {
+        free(field);
+    }
+
+    endwin();
+    return 0;
 }
